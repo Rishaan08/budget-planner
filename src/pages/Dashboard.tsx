@@ -1,12 +1,12 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PlusIcon, DollarSign, PieChart, History, Pencil, Trash2 } from "lucide-react";
+import { PlusIcon, DollarSign, PieChart, History, Pencil, Trash2, LogOut } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ExpenseDialog } from "@/components/ExpenseDialog";
 import { Expense } from "@/types/expense";
+import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +23,25 @@ const Dashboard = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   const fetchExpenses = async () => {
     try {
@@ -63,6 +82,21 @@ const Dashboard = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      toast({ title: "Logged out successfully" });
+      navigate("/auth");
+    } catch (error: any) {
+      toast({
+        title: "Error logging out",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const categories = [...new Set(expenses.map((expense) => expense.category))];
   const thisMonth = new Date().toISOString().slice(0, 7);
@@ -75,11 +109,21 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto space-y-6 animate-in">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <ExpenseDialog onSuccess={fetchExpenses} trigger={
-            <Button className="bg-mint-500 hover:bg-mint-600">
-              <PlusIcon className="mr-2 h-4 w-4" /> Add Expense
+          <div className="flex gap-4">
+            <ExpenseDialog onSuccess={fetchExpenses} trigger={
+              <Button className="bg-mint-500 hover:bg-mint-600">
+                <PlusIcon className="mr-2 h-4 w-4" /> Add Expense
+              </Button>
+            } />
+            <Button 
+              variant="outline" 
+              className="gap-2" 
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" /> 
+              Logout
             </Button>
-          } />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
