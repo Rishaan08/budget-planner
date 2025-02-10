@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ExpenseFormData } from "@/types/expense";
+import { ExpenseFormData, Expense } from "@/types/expense";
 
 const CATEGORIES = [
   "Food",
@@ -20,7 +20,7 @@ const CATEGORIES = [
 ];
 
 type ExpenseDialogProps = {
-  expense?: ExpenseFormData;
+  expense?: Expense;
   onSuccess: () => void;
   trigger?: React.ReactNode;
 };
@@ -28,9 +28,15 @@ type ExpenseDialogProps = {
 export function ExpenseDialog({ expense, onSuccess, trigger }: ExpenseDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const { toast } = useToast();
   const [formData, setFormData] = useState<ExpenseFormData>(
-    expense || {
+    expense ? {
+      description: expense.description,
+      amount: expense.amount,
+      date: expense.date,
+      category: expense.category,
+    } : {
       description: "",
       amount: 0,
       date: new Date().toISOString().split("T")[0],
@@ -38,20 +44,39 @@ export function ExpenseDialog({ expense, onSuccess, trigger }: ExpenseDialogProp
     }
   );
 
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      toast({ 
+        title: "Error", 
+        description: "You must be logged in to add expenses",
+        variant: "destructive" 
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (expense) {
         const { error } = await supabase
           .from("expenses")
-          .update(formData)
+          .update({ ...formData })
           .eq("id", expense.id);
         if (error) throw error;
         toast({ title: "Expense updated successfully" });
       } else {
-        const { error } = await supabase.from("expenses").insert([formData]);
+        const { error } = await supabase
+          .from("expenses")
+          .insert([{ ...formData, user_id: user.id }]);
         if (error) throw error;
         toast({ title: "Expense added successfully" });
       }
